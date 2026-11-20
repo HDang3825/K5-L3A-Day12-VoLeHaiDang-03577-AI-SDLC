@@ -1,0 +1,47 @@
+# Giả định kỹ thuật và Tiêu chí nghiệm thu - Phase 1 (PRD-0)
+
+## 1. Giả định kỹ thuật (Assumptions)
+- **Hệ toạ độ**: 3D với Y hướng lên. Mặt phẳng di chuyển chính là XZ ($Y = 0$).
+- **Vị trí xuất phát**: Người chơi (Mây) xuất phát tại `(0, 0, 0)` với `flames = 3`, `carried = 0`.
+- **5 Đèn Lồng Lớn (L1 đến L5)**:
+  - Phân bố đều trên đảo tròn bán kính $R = 30\text{m}$.
+  - Toạ độ mặc định (nếu không có scenario override):
+    - `L1`: `(0, 0, 20)`
+    - `L2`: `(19.02, 0, 6.18)`
+    - `L3`: `(11.76, 0, -16.18)`
+    - `L4`: `(-11.76, 0, -16.18)`
+    - `L5`: `(-19.02, 0, 6.18)`
+  - Mỗi đèn cần `lantern_cost = 3` đom đóm để thắp sáng (`lit: true`).
+- **Cơ chế nhặt đom đóm (Motes)**:
+  - Bán kính nhặt: `pickup_radius = 1.5m`.
+  - Giới hạn mang: `carry_capacity = 5`. Nếu đã đầy, không nhặt thêm.
+  - Khi nhặt, phát event `mote_picked` với `{"carried": n}`.
+- **Cơ chế nạp đom đóm vào đèn (Deposit)**:
+  - Bán kính tương tác: `interact_radius = 2.5m`.
+  - Khi `interact` chuyển từ `false` sang `true`: Nạp toàn bộ số đom đóm đang mang vào đèn gần nhất chưa sáng, nhưng không vượt quá số lượng đèn còn thiếu.
+  - Phát event `deposit` với `{"lantern_id": id, "amount": n, "deposited": total}`.
+  - Nếu đèn đủ sáng (`deposited >= lantern_cost`), chuyển `lit: true` và phát event `lantern_lit` với `{"lantern_id": id}`.
+- **Cơ chế Tỏa sáng (Pulse)**:
+  - Chi phí: `pulse_cost = 1` đom đóm (nếu `carried < 1` thì không kích hoạt được).
+  - Bán kính: `pulse_radius = 5.0m`.
+  - Cooldown: `pulse_cooldown_s = 2.0` giây (120 ticks).
+  - Tác dụng lên Bóng Mực trong bán kính: bị choáng trong `pulse_stun_s = 3.0` giây (180 ticks), bị đẩy lùi một đoạn `pulse_push_m = 4.0m` theo hướng ra xa người chơi.
+  - Phát event `pulse` với `{"stunned_ids": [...]}`.
+- **Cơ chế Bóng Mực (Shades)**:
+  - Tốc độ: `shade_speed = 3.5m/s`.
+  - Bán kính tấn công: `shade_hit_radius = 1.2m`.
+  - Vùng an toàn quanh đèn: `safe_radius = 4.0m`. Bóng Mực không thể tiến vào vùng này quanh bất kỳ đèn nào đã được thắp sáng (`lit: true`).
+  - Khi va chạm người chơi (và người chơi không trong thời gian bất tử `invuln_s`):
+    - Người chơi mất 1 `flame`.
+    - Rơi đom đóm: `dropped = Math.floor(carried * hit_drop_ratio)`. `carried` giảm đi số lượng tương ứng.
+    - Phát event `player_hit` với `{"by": "shade", "flames": current, "dropped": dropped}`.
+    - Bật trạng thái bất tử `invuln_s = 1.5` giây (90 ticks).
+- **Điều kiện kết thúc**:
+  - Thắng: Khi toàn bộ 5 đèn đều `lit: true` $\rightarrow$ event `game_over` `{"result": "won", "reason": "all_lit"}`.
+  - Thua do hết máu: Khi `flames <= 0` $\rightarrow$ event `game_over` `{"result": "lost", "reason": "no_flames"}`.
+  - Thua do hết giờ: Khi `time_left_s <= 0` $\rightarrow$ event `game_over` `{"result": "lost", "reason": "dawn"}`.
+- **Tính điểm (Score)**:
+  - Nhặt đom đóm: +10đ
+  - Thắp đèn: +100đ
+  - Choáng bóng mực: +20đ
+  - Khi thắng: cộng thêm `time_left_s * 2` + `flames * 50`.

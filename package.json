@@ -1,0 +1,23 @@
+{
+  "name": "dao-den-long",
+  "version": "1.0.0",
+  "description": "Game 3D Đảo Đèn Lồng - AI SDLC Phase 1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc",
+    "headless": "tsx src/headless/index.ts",
+    "test": "node --test tests/*.test.js",
+    "ai:ask": "node scripts/ai_coder.js"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

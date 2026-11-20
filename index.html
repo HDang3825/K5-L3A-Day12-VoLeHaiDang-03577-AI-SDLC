@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đảo Đèn Lồng - Đêm 1: Đảo Bến</title>
+  <link rel="stylesheet" href="./src/web/style.css">
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="hud">
+    <div class="hud-top">
+      <div class="hud-item"><span class="icon">🏮</span> Đèn thắp: <span id="lit-count">0/5</span></div>
+      <div class="hud-item"><span class="icon">✨</span> Đom đóm: <span id="carried-count">0/5</span></div>
+      <div class="hud-item"><span class="icon">❤️</span> Sinh lực (Flames): <span id="flames-count">3</span></div>
+      <div class="hud-item"><span class="icon">⏳</span> Thời gian: <span id="time-left">180s</span></div>
+      <div class="hud-item"><span class="icon">🏆</span> Điểm: <span id="score-val">0</span></div>
+    </div>
+    <div class="hud-bottom">
+      <div class="guide-tip">
+        [W/A/S/D hoặc Mũi tên]: Di chuyển · [E]: Nạp đom đóm vào đèn · [Space/Q]: Tỏa sáng xua Bóng Mực
+      </div>
+    </div>
+  </div>
+  <div id="overlay" class="hidden">
+    <div class="modal">
+      <h1 id="overlay-title">Chiến Thắng!</h1>
+      <p id="overlay-msg">Bạn đã thắp sáng toàn bộ Đèn Lồng trên Đảo Bến.</p>
+      <button id="btn-restart">Chơi Lại</button>
+    </div>
+  </div>
+  <script type="module" src="./src/web/main.ts"></script>
+</body>
+</html>
