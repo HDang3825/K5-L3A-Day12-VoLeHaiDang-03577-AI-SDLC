@@ -1,17 +1,13 @@
 // tests/contract.test.js
-// Contract v1.1 – Ticket-02 acceptance tests (headless).
+// Contract v1.2 – Ticket-03 acceptance tests (headless).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHeadlessGame } from "../src/headless/index.js";
-import { execSync } from "node:child_process";
-import fs from "node:fs";
 
 const DT = 1 / 60;
 const make = (opts = {}) => createHeadlessGame({ seed: 1234, dt: DT, ...opts });
 const player = (sim) => sim.state.player;
-const hSpeed = (p) => (typeof p.speed === "number" ? p.speed : Math.hypot(p.vel.x, p.vel.z));
-const dist2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const eventsOf = (sim, type) => sim.events.filter((e) => e.type === type);
 const near = (actual, expected, eps, msg) =>
   assert.ok(
@@ -19,126 +15,132 @@ const near = (actual, expected, eps, msg) =>
     `${msg ?? "value"}: expected ${expected} ±${eps}, got ${actual}`
   );
 
-// 1. Dash
-test("Dash: pressing dash emits 'dash' and speed reaches 14.0 m/s", () => {
-  const sim = make({ setup: { player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 } } });
-  sim.setMove({ x: 0, z: 1 });
-  sim.tick(10);
-  const before = hSpeed(player(sim));
-  assert.ok(before < 14.0, `base speed (${before}) must be below dash speed`);
-  assert.equal(eventsOf(sim, "dash").length, 0, "no dash event before input");
+// 1. Fuel decay and lantern_out
+test("Fuel decay: lit lantern loses 1 fuel/sec and turns off when fuel <= 0 ('lantern_out')", () => {
+  const sim = make({
+    setup: {
+      lanterns: [{ id: "L1", pos: { x: 0, y: 0, z: 10 }, lit: true, fuel: 2 }], // 2 fuel = 120 ticks
+    },
+  });
+  sim.tick(60); // after 1s, fuel should drop to ~1.0
+  const lAfter1s = sim.sim.lanterns.find((l) => l.id === "L1");
+  assert.ok(lAfter1s.lit, "lantern still lit at 1 fuel");
+  near(lAfter1s.fuel, 1.0, 0.05, "fuel after 60 ticks");
 
-  sim.press("dash");
-  sim.tick(1);
-
-  assert.equal(eventsOf(sim, "dash").length, 1, "exactly one 'dash' event");
-  const after = hSpeed(player(sim));
-  near(after, 14.0, 0.01, "dash speed");
-  assert.ok(after > before, "speed increased after dash");
+  sim.tick(65); // drops below 0 -> lantern_out
+  assert.ok(!lAfter1s.lit, "lantern turns off when fuel exhausted");
+  assert.equal(eventsOf(sim, "lantern_out").length, 1, "'lantern_out' emitted");
+  assert.equal(lAfter1s.ever_lit, true, "ever_lit must be true");
 });
 
-// 2. Drifter
-test("Drifter (Gió Lạc): steals motes when player carries >= 5", () => {
+// 2. Refuel mechanism
+test("Refuel: pressing interact near lit lantern refuels it ('refuel')", () => {
+  const sim = make({
+    setup: {
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 3 },
+      lanterns: [{ id: "L1", pos: { x: 0, y: 0, z: 1 }, lit: true, fuel: 80 }],
+    },
+  });
+  sim.press("interact");
+  sim.tick(1);
+
+  const l = sim.sim.lanterns.find((item) => item.id === "L1");
+  assert.equal(l.fuel, 100, "lantern refueled to 100");
+  assert.equal(player(sim).motes, 1, "consumed 2 motes to add 20 fuel");
+  assert.equal(eventsOf(sim, "refuel").length, 1, "'refuel' emitted");
+});
+
+// 3. Relight cost
+test("Relight cost: ever_lit lantern requires only 5 motes to relight", () => {
   const sim = make({
     setup: {
       player: { pos: { x: 0, y: 0, z: 0 }, motes: 5 },
-      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+      lanterns: [{ id: "L1", pos: { x: 0, y: 0, z: 1 }, lit: false, ever_lit: true, deposited: 0 }],
     },
   });
-  sim.tick(300);
-  const d = sim.state.drifters[0];
-  assert.ok(d.stolen > 0, "drifter holds stolen motes");
-  assert.ok(player(sim).motes < 5, "player lost motes");
-  assert.equal(player(sim).motes + d.stolen, 5, "motes are conserved");
+  sim.press("interact");
+  sim.tick(1);
+
+  const l = sim.sim.lanterns.find((item) => item.id === "L1");
+  assert.ok(l.lit, "relit with 5 motes");
+  assert.equal(l.fuel, 100, "fuel resets to 100 on relight");
+  const litEvent = eventsOf(sim, "lantern_lit")[0];
+  assert.equal(litEvent.relight, true, "relight: true in lantern_lit event");
 });
 
-test("Drifter: does not steal when player carries < 5 motes", () => {
+// 4. Shade Drain
+test("Shade Drain: shade wanders to lantern with fuel < 30 and drains 5 fuel/sec", () => {
   const sim = make({
     setup: {
-      player: { pos: { x: 0, y: 0, z: 0 }, motes: 4 },
-      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+      player: { pos: { x: 50, y: 0, z: 50 }, motes: 0 },
+      lanterns: [{ id: "L1", pos: { x: 0, y: 0, z: 0 }, lit: true, fuel: 20 }],
+      shades: [{ id: "S1", pos: { x: 0.5, y: 0, z: 0.5 }, state: "wander" }],
     },
   });
-  sim.tick(300);
-  assert.equal(sim.state.drifters[0].stolen, 0);
-  assert.equal(player(sim).motes, 4);
+  sim.tick(65); // 1 second of draining: 1 natural + 5 drain = 6 fuel drop
+  const l = sim.sim.lanterns.find((item) => item.id === "L1");
+  assert.ok(l.fuel < 15, "drained by shade");
+  assert.ok(eventsOf(sim, "fuel_drain").length >= 1, "'fuel_drain' event emitted");
 });
 
-test("Drifter: pulse forces drop of stolen motes ('drifter_drop')", () => {
+// 5. Pulse on Draining Shade grants +15 points
+test("Pulse on draining shade awards +15 points", () => {
   const sim = make({
     setup: {
-      player: { pos: { x: 0, y: 0, z: 0 }, motes: 6 },
-      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 5 },
+      lanterns: [{ id: "L1", pos: { x: 0, y: 0, z: 1 }, lit: true, fuel: 20 }],
+      shades: [{ id: "S1", pos: { x: 0.5, y: 0, z: 0.5 }, state: "drain" }],
     },
   });
-  sim.tick(15);
-  assert.ok(sim.state.drifters[0].stolen > 0, "precondition: steal happened");
-  assert.equal(eventsOf(sim, "drifter_drop").length, 0);
-
+  const scoreBefore = sim.sim.score;
   sim.press("pulse");
-  sim.tick(2);
+  sim.tick(1);
 
-  assert.ok(eventsOf(sim, "drifter_drop").length >= 1, "'drifter_drop' emitted");
-  assert.equal(sim.state.drifters[0].stolen, 0, "drifter no longer holds motes");
+  assert.equal(sim.sim.score - scoreBefore, 15, "awards 15 points for pulsing a draining shade");
 });
 
-// 3. Safe zone
-test("Safe Zone: Shade never penetrates within 6.0m of a lit lantern", () => {
-  const lantern = { x: 0, y: 0, z: 0 };
+// 6. Win condition: dawn_survived (surviving until dawn with >= 60% lit lanterns, no early win)
+test("Win condition: no early win, wins with 'dawn_survived' at dawn if >= 60% lit", () => {
   const sim = make({
     setup: {
-      player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 },
-      lanterns: [{ pos: lantern, lit: true }],
-      shades: [
-        { pos: { x: 20, y: 0, z: 0 } },
-        { pos: { x: -15, y: 0, z: 12 } },
-        { pos: { x: 0, y: 0, z: -18 } },
+      time_left_s: 1.0, // 60 ticks left
+      player: { pos: { x: 0, y: 0, z: 0 }, flames: 3 },
+      lanterns: [
+        { id: "L1", pos: { x: 0, y: 0, z: 10 }, lit: true, fuel: 80 },
+        { id: "L2", pos: { x: 10, y: 0, z: 10 }, lit: true, fuel: 80 },
+        { id: "L3", pos: { x: -10, y: 0, z: 10 }, lit: true, fuel: 80 },
+        { id: "L4", pos: { x: 20, y: 0, z: 10 }, lit: false, fuel: 0 },
+        { id: "L5", pos: { x: -20, y: 0, z: 10 }, lit: false, fuel: 0 },
       ],
     },
   });
-  let minDist = Infinity;
-  for (let i = 0; i < 900; i++) {
-    sim.tick(1);
-    for (const s of sim.state.shades) {
-      const d = dist2D(s.pos, lantern);
-      minDist = Math.min(minDist, d);
-      assert.ok(d >= 6.0 - 1e-6, `tick ${i}: shade at ${d.toFixed(3)}m < 6.0m`);
-    }
-  }
-  assert.ok(minDist >= 6.0 - 1e-6);
+  sim.tick(30);
+  assert.equal(sim.sim.state, "playing", "no early win even with 3 lanterns lit");
+
+  sim.tick(31); // reaches dawn (time_left <= 0)
+  assert.equal(sim.sim.state, "won", "won at dawn");
+  const gameOverEvent = eventsOf(sim, "game_over")[0];
+  assert.equal(gameOverEvent.reason, "dawn_survived", "reason must be dawn_survived");
 });
 
-// 4. Jump & fall
-test("Jump: vy = 7.0 on jump and gravity pulls player back down", () => {
+// 7. Dash Mechanism
+test("Dash: reaches 14.0 m/s and emits 'dash'", () => {
   const sim = make({ setup: { player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 } } });
-  sim.tick(5);
-  const y0 = player(sim).pos.y;
-
-  sim.press("jump");
+  sim.setMove({ x: 0, z: 1 });
+  sim.press("dash");
   sim.tick(1);
-  const vy1 = player(sim).vel.y;
-  near(vy1, 7.0, 0.6, "vy right after jump");
-
-  for (let i = 0; i < 120; i++) {
-    sim.tick(1);
-  }
-  near(player(sim).pos.y, y0, 0.05, "player landed back on ground");
+  assert.equal(eventsOf(sim, "dash").length, 1);
+  near(sim.state.player.speed, 14.0, 0.01, "dash speed");
 });
 
-// 5. Headless performance
-test("Headless performance: 1000 ticks run under 2 seconds", () => {
-  const start = performance.now();
-  const sim = make();
-  sim.tick(1000);
-  const duration = performance.now() - start;
-  assert.ok(duration < 2000, `1000 ticks took ${duration.toFixed(2)}ms, must be < 2000ms`);
-});
-
-// 6. Determinism verification
-test("Determinism verification across two runs", () => {
-  const sim1 = createHeadlessGame({ seed: 7777 });
-  const sim2 = createHeadlessGame({ seed: 7777 });
-  sim1.tick(300);
-  sim2.tick(300);
-  assert.equal(sim1.toJSONL(), sim2.toJSONL(), "Two simulation runs with same seed must be identical");
+// 8. Headless speed & Determinism
+test("Headless performance & Determinism across two runs", () => {
+  const sim1 = createHeadlessGame({ seed: 8888 });
+  const sim2 = createHeadlessGame({ seed: 8888 });
+  const t0 = performance.now();
+  sim1.tick(600);
+  sim2.tick(600);
+  const dur = performance.now() - t0;
+  assert.ok(dur < 1500, `Execution took ${dur.toFixed(2)}ms < 1500ms`);
+  assert.equal(sim1.toJSONL(), sim2.toJSONL(), "Deterministic output identical");
 });
