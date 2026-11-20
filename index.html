@@ -3,32 +3,122 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Đảo Đèn Lồng - Đêm 1: Đảo Bến</title>
+  <title>Đảo Đèn Lồng</title>
+  <meta name="description" content="Đảo Đèn Lồng - Trò chơi 3D góc nhìn thứ ba">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap&subset=vietnamese" rel="stylesheet">
   <link rel="stylesheet" href="./src/web/style.css">
 </head>
 <body>
   <div id="game-container"></div>
+
   <div id="hud">
-    <div class="hud-top">
-      <div class="hud-item"><span class="icon">🏮</span> Đèn thắp: <span id="lit-count">0/5</span></div>
-      <div class="hud-item"><span class="icon">✨</span> Đom đóm: <span id="carried-count">0/5</span></div>
-      <div class="hud-item"><span class="icon">❤️</span> Sinh lực (Flames): <span id="flames-count">3</span></div>
-      <div class="hud-item"><span class="icon">⏳</span> Thời gian: <span id="time-left">180s</span></div>
-      <div class="hud-item"><span class="icon">🏆</span> Điểm: <span id="score-val">0</span></div>
+    <!-- Top-Left -->
+    <section id="hud-flames" aria-label="Sinh Mệnh">
+      <span class="hud-label">Sinh Mệnh</span>
+      <div class="flames">
+        <span class="flame" aria-hidden="true"></span>
+        <span class="flame" aria-hidden="true"></span>
+        <span class="flame" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- Top-Center -->
+    <section id="hud-timer" aria-live="polite">
+      <span id="timer-text">04:00</span>
+      <span id="timer-warning" hidden></span>
+    </section>
+
+    <!-- Top-Right -->
+    <section id="hud-stats">
+      <div id="night-display">Đêm 1: Đảo Bến</div>
+      <div id="lit-count">0/5 Đèn</div>
+      <div id="score-value">0 điểm</div>
+      <button id="btn-help" type="button">❓ Hướng dẫn</button>
+    </section>
+
+    <!-- Center -->
+    <div id="interaction-prompt" hidden>E — Thắp Đèn / Châm Dầu</div>
+
+    <!-- Compass -->
+    <div id="compass-dial" aria-hidden="true">
+      <span id="compass-arrow">➤</span>
     </div>
-    <div class="hud-bottom">
-      <div class="guide-tip">
-        [W/A/S/D hoặc Mũi tên]: Di chuyển · [E]: Nạp đom đóm vào đèn · [Space/Q]: Tỏa sáng xua Bóng Mực
+
+    <!-- Bottom-Center -->
+    <section id="hud-motes">
+      <div id="motes-bar">
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+        <span class="mote-slot"></span>
+      </div>
+      <span id="motes-count">0/10</span>
+    </section>
+
+    <!-- Bottom-Right -->
+    <section id="hud-skills">
+      <div class="skill" id="skill-dash">
+        <span class="skill-key">Shift</span>
+        <span class="skill-name">Dash</span>
+        <span class="skill-cooldown"></span>
+      </div>
+      <div class="skill" id="skill-pulse">
+        <span class="skill-key">Q</span>
+        <span class="skill-name">Pulse</span>
+        <span class="skill-cooldown"></span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+    <div class="modal-card">
+      <h2 id="help-title">Hướng dẫn</h2>
+      <ul class="help-list">
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — Di chuyển</li>
+        <li><kbd>Chuột</kbd> — Xoay camera</li>
+        <li><kbd>E</kbd> — Thắp đèn / Châm dầu</li>
+        <li><kbd>Shift</kbd> — Lướt nhanh (Dash)</li>
+        <li><kbd>Q</kbd> — Xung ánh sáng (Pulse)</li>
+        <li><kbd>Esc</kbd> — Tạm dừng</li>
+      </ul>
+      <p class="help-goal">Thu thập đốm sáng, thắp tất cả đèn lồng trước khi hết giờ và giữ ngọn lửa sinh mệnh không tắt.</p>
+      <button id="btn-close-help" type="button">Đã hiểu</button>
+    </div>
+  </div>
+
+  <!-- Pause Modal -->
+  <div id="pause-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+    <div class="modal-card">
+      <h2 id="pause-title">Tạm dừng</h2>
+      <p>Trò chơi đã được tạm dừng.</p>
+      <div class="modal-actions">
+        <button id="btn-resume" type="button">Tiếp tục</button>
+        <button id="btn-restart-pause" type="button">Chơi lại</button>
       </div>
     </div>
   </div>
-  <div id="overlay" class="hidden">
-    <div class="modal">
-      <h1 id="overlay-title">Chiến Thắng!</h1>
-      <p id="overlay-msg">Bạn đã thắp sáng toàn bộ Đèn Lồng trên Đảo Bến.</p>
-      <button id="btn-restart">Chơi Lại</button>
+
+  <!-- Game Over Modal -->
+  <div id="gameover-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="gameover-title" hidden>
+    <div class="modal-card">
+      <h2 id="gameover-title">Trò chơi kết thúc</h2>
+      <p id="gameover-message">Ngọn đèn đã tắt.</p>
+      <p class="final-score">Điểm: <strong id="final-score">0</strong></p>
+      <div class="modal-actions">
+        <button id="btn-restart" type="button">Chơi lại</button>
+      </div>
     </div>
   </div>
+
   <script type="module" src="./src/web/main.ts"></script>
 </body>
 </html>

@@ -1,128 +1,319 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* =========================================================
+   Đảo Đèn Lồng — src/web/style.css
+   Palette: Ticket-02 Official
+   ========================================================= */
+
+:root {
+  --night: #0E1430;
+  --fog: #1B2350;
+  --grass: #2F5D50;
+  --wood: #6B4A2F;
+  --water: #12384A;
+  --lantern-lit: #FFB347;
+  --lantern-core: #FFE9B0;
+  --lantern-unlit: #5B5F6E;
+  --mote: #FFF6C2;
+  --glow: #FFE58A;
+  --gold: #F2C14E;
+  --danger: #FF5A5F;
+  --text: #F5F1E6;
+  --shade: #7A3CFF;
+  --stunned: #FF3CC8;
+
+  --glass-bg: rgba(20, 26, 60, 0.75);
+  --glass-border: 1.5px solid rgba(242, 193, 78, 0.8);
+  --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 12px rgba(242, 193, 78, 0.25);
+  --font: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
 }
 
-body, html {
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #05060f;
-  color: #fff;
-  user-select: none;
+  background: var(--night);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+button { font-family: inherit; font-size: 1rem; }
+
+/* ---------- Game layers ---------- */
+
 #game-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(ellipse at 50% 30%, var(--fog), var(--night));
+}
+
+#game-container canvas {
+  display: block;
   width: 100%;
   height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
 }
 
 #hud {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  position: fixed;
+  inset: 0;
   pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 20px;
+  z-index: 10;
 }
 
-.hud-top {
-  display: flex;
-  gap: 20px;
-  background: rgba(10, 15, 30, 0.75);
-  backdrop-filter: blur(6px);
-  padding: 12px 24px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 180, 50, 0.3);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  align-self: flex-start;
+/* ---------- Glass shared ---------- */
+
+#hud-flames,
+#hud-timer,
+#hud-stats,
+#hud-motes,
+#hud-skills,
+#interaction-prompt,
+#help-modal,
+#compass-dial,
+.modal-card {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--text);
 }
 
-.hud-item {
-  font-size: 16px;
+#hud-flames,
+#hud-timer,
+#hud-stats,
+#hud-motes,
+#hud-skills,
+#interaction-prompt {
+  position: absolute;
+  border-radius: 999px;
+  padding: 8px 18px;
   font-weight: 600;
-  color: #ffde8a;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
 }
 
-.hud-bottom {
-  align-self: center;
-  margin-bottom: 15px;
+/* ---------- Positions ---------- */
+
+#hud-flames { top: 16px; left: 16px; gap: 8px; }
+
+#hud-timer {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--gold);
 }
 
-.guide-tip {
-  background: rgba(10, 15, 30, 0.6);
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #a0aec0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+#hud-timer.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  animation: timer-pulse 1s ease-in-out infinite;
 }
 
-#overlay {
+#compass-dial {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(5, 6, 15, 0.85);
-  backdrop-filter: blur(8px);
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
 }
 
-#overlay.hidden {
-  display: none;
+#compass-dial .needle,
+#compass-dial #compass-needle {
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, var(--lantern-lit) 50%, var(--lantern-unlit) 50%);
+  transform-origin: 50% 50%;
+  box-shadow: 0 0 8px rgba(255, 179, 71, 0.6);
 }
 
-.modal {
-  background: #111827;
-  border: 2px solid #f59e0b;
+#hud-stats {
+  top: 16px;
+  right: 16px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   border-radius: 16px;
-  padding: 36px 48px;
-  text-align: center;
-  max-width: 480px;
-  box-shadow: 0 0 30px rgba(245, 158, 11, 0.3);
+  font-size: 1rem;
 }
 
-.modal h1 {
-  font-size: 28px;
-  color: #fbbf24;
-  margin-bottom: 12px;
+#interaction-prompt {
+  top: 65%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--core, var(--lantern-core));
+  font-size: 1.0625rem;
+  box-shadow: var(--glass-shadow), 0 0 18px rgba(255, 229, 138, 0.35);
+  white-space: nowrap;
+  animation: prompt-bob 1.8s ease-in-out infinite;
 }
 
-.modal p {
-  color: #d1d5db;
-  font-size: 16px;
-  margin-bottom: 24px;
+#interaction-prompt.hidden,
+.hidden { display: none !important; }
+
+#hud-motes {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  gap: 6px;
+  padding: 10px 16px;
 }
 
-#btn-restart {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border: none;
-  padding: 12px 28px;
-  font-size: 16px;
-  font-weight: bold;
-  color: #fff;
-  border-radius: 8px;
+#hud-skills {
+  bottom: 20px;
+  right: 20px;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+#help-modal {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  max-width: 300px;
+  border-radius: 16px;
+  padding: 14px 18px;
+  font-size: 1rem;
+  pointer-events: auto;
+}
+
+#help-modal h3 {
+  margin: 0 0 6px;
+  color: var(--gold);
+  font-size: 1.0625rem;
+}
+
+#help-modal kbd {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--fog);
+  border: 1px solid rgba(242, 193, 78, 0.5);
+  color: var(--lantern-core);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* ---------- Flames ---------- */
+
+.flame {
+  position: relative;
+  width: 20px;
+  height: 28px;
+  background: radial-gradient(ellipse at 50% 75%, var(--lantern-core) 0%, var(--lantern-lit) 50%, var(--danger) 100%);
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  box-shadow: 0 0 10px var(--lantern-lit), 0 0 22px rgba(255, 179, 71, 0.6);
+  transform-origin: 50% 100%;
+  animation: flame-flicker 0.9s ease-in-out infinite alternate;
+  transition: opacity 0.4s, filter 0.4s;
+}
+
+.flame:nth-child(2n) { animation-duration: 0.7s; animation-delay: -0.2s; }
+.flame:nth-child(3n) { animation-duration: 1.1s; animation-delay: -0.5s; }
+
+.flame.lost {
+  opacity: 0.2;
+  filter: grayscale(1);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes flame-flicker {
+  0%   { transform: scale(1, 1) rotate(-2deg); filter: brightness(1); }
+  30%  { transform: scale(0.95, 1.08) rotate(2deg); filter: brightness(1.15); }
+  60%  { transform: scale(1.05, 0.94) rotate(-1deg); filter: brightness(0.95); }
+  100% { transform: scale(0.97, 1.05) rotate(1deg); filter: brightness(1.1); }
+}
+
+/* ---------- Mote slots ---------- */
+
+.mote-slot {
+  width: 14px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(91, 95, 110, 0.35);
+  border: 1px solid rgba(245, 241, 230, 0.2);
+  transition: background 0.25s, box-shadow 0.25s, border-color 0.25s, transform 0.25s;
+}
+
+.mote-slot.filled {
+  background: linear-gradient(to top, var(--gold), var(--mote));
+  border-color: var(--glow);
+  box-shadow: 0 0 8px var(--glow), 0 0 16px rgba(242, 193, 78, 0.6);
+  transform: scale(1.06);
+}
+
+/* ---------- Skills ---------- */
+
+.skill {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(242, 193, 78, 0.6);
+  background: rgba(27, 35, 80, 0.8);
+  color: var(--text);
+  font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  pointer-events: auto;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
-#btn-restart:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(245, 158, 11, 0.4);
+.skill:hover { transform: translateY(-2px); box-shadow: 0 0 14px rgba(242, 193, 78, 0.5); }
+.skill:disabled, .skill.cooldown { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- Status states ---------- */
+
+.is-shade { color: var(--shade); }
+.is-stunned { color: var(--stunned); }
+
+/* ---------- Fuel billboards ---------- */
+
+.fuel-billboard {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid rgba(242, 193, 78, 0.6);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.fuel-bar {
+  position: relative;
+  width: 56px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--lantern-unlit);
+  overflow: hidden;
+}
+
+.fuel-bar > .fuel-fill,
+.fuel-bar > .fuel {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--lantern-lit), var(--lantern-core));
+  transition: width 0.2s linear;
 }
