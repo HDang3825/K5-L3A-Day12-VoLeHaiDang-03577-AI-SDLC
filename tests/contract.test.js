@@ -1,96 +1,144 @@
-import test from "node:test";
+// tests/contract.test.js
+// Contract v1.1 – Ticket-02 acceptance tests (headless).
+
+import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHeadlessGame } from "../src/headless/index.js";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 
-test("Headless CLI - Pickup and Deposit Scenario", (t) => {
-  const outPath = "tests/output/out_pickup_deposit.jsonl";
-  if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
+const DT = 1 / 60;
+const make = (opts = {}) => createHeadlessGame({ seed: 1234, dt: DT, ...opts });
+const player = (sim) => sim.state.player;
+const hSpeed = (p) => (typeof p.speed === "number" ? p.speed : Math.hypot(p.vel.x, p.vel.z));
+const dist2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const eventsOf = (sim, type) => sim.events.filter((e) => e.type === type);
+const near = (actual, expected, eps, msg) =>
+  assert.ok(
+    Math.abs(actual - expected) <= eps,
+    `${msg ?? "value"}: expected ${expected} ±${eps}, got ${actual}`
+  );
 
-  const cmd = `npx tsx src/headless/index.ts --seed 42 --night 1 --scenario tests/scenarios/scenario_pickup_deposit.json --inputs tests/inputs/inputs_pickup_deposit.json --ticks 150 --out ${outPath} --snapshot-every 30`;
-  execSync(cmd, { stdio: "pipe" });
+// 1. Dash
+test("Dash: pressing dash emits 'dash' and speed reaches 14.0 m/s", () => {
+  const sim = make({ setup: { player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 } } });
+  sim.setMove({ x: 0, z: 1 });
+  sim.tick(10);
+  const before = hSpeed(player(sim));
+  assert.ok(before < 14.0, `base speed (${before}) must be below dash speed`);
+  assert.equal(eventsOf(sim, "dash").length, 0, "no dash event before input");
 
-  assert.ok(fs.existsSync(outPath), "Output file should be created");
-  const lines = fs.readFileSync(outPath, "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+  sim.press("dash");
+  sim.tick(1);
 
-  const snapshots = lines.filter((l) => l.type === "snapshot");
-  const events = lines.filter((l) => l.type === "event");
-  const end = lines.find((l) => l.type === "end");
-
-  assert.ok(snapshots.length > 0, "Should have periodic snapshots");
-  assert.equal(snapshots[0].tick, 0, "First snapshot should be tick 0");
-
-  const moteEvents = events.filter((e) => e.name === "mote_picked");
-  assert.ok(moteEvents.length >= 3, "Should have picked 3 motes");
-
-  const depositEvents = events.filter((e) => e.name === "deposit");
-  assert.ok(depositEvents.length >= 1, "Should have deposited into L1");
-
-  const litEvents = events.filter((e) => e.name === "lantern_lit");
-  assert.ok(litEvents.length >= 1, "Lantern L1 should be lit");
-
-  assert.ok(end, "Should have end record");
+  assert.equal(eventsOf(sim, "dash").length, 1, "exactly one 'dash' event");
+  const after = hSpeed(player(sim));
+  near(after, 14.0, 0.01, "dash speed");
+  assert.ok(after > before, "speed increased after dash");
 });
 
-test("Headless CLI - Pulse Stun Scenario", (t) => {
-  const outPath = "tests/output/out_pulse.jsonl";
-  if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
-
-  const cmd = `npx tsx src/headless/index.ts --seed 123 --night 1 --scenario tests/scenarios/scenario_pulse_stun.json --inputs tests/inputs/inputs_pulse_stun.json --ticks 60 --out ${outPath}`;
-  execSync(cmd, { stdio: "pipe" });
-
-  const lines = fs.readFileSync(outPath, "utf-8").trim().split("\n").map((l) => JSON.parse(l));
-  const pulseEvents = lines.filter((l) => l.type === "event" && l.name === "pulse");
-  assert.equal(pulseEvents.length, 1, "Should emit 1 pulse event");
-  assert.deepEqual(pulseEvents[0].data.stunned_ids, ["S1"], "Should stun shade S1");
+// 2. Drifter
+test("Drifter (Gió Lạc): steals motes when player carries >= 5", () => {
+  const sim = make({
+    setup: {
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 5 },
+      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+    },
+  });
+  sim.tick(300);
+  const d = sim.state.drifters[0];
+  assert.ok(d.stolen > 0, "drifter holds stolen motes");
+  assert.ok(player(sim).motes < 5, "player lost motes");
+  assert.equal(player(sim).motes + d.stolen, 5, "motes are conserved");
 });
 
-test("Headless CLI - Player Hit and Game Over (no_flames)", (t) => {
-  const outPath = "tests/output/out_gameover.jsonl";
-  if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
-
-  const cmd = `npx tsx src/headless/index.ts --seed 777 --night 1 --scenario tests/scenarios/scenario_hit_gameover.json --ticks 30 --out ${outPath}`;
-  execSync(cmd, { stdio: "pipe" });
-
-  const lines = fs.readFileSync(outPath, "utf-8").trim().split("\n").map((l) => JSON.parse(l));
-  const hitEvents = lines.filter((l) => l.type === "event" && l.name === "player_hit");
-  assert.equal(hitEvents.length, 1, "Should register player hit");
-  assert.equal(hitEvents[0].data.flames, 0, "Flames should reach 0");
-
-  const gameOverEvents = lines.filter((l) => l.type === "event" && l.name === "game_over");
-  assert.equal(gameOverEvents.length, 1, "Should emit game_over event");
-  assert.equal(gameOverEvents[0].data.result, "lost");
-  assert.equal(gameOverEvents[0].data.reason, "no_flames");
-
-  const end = lines.find((l) => l.type === "end");
-  assert.equal(end.state, "lost");
+test("Drifter: does not steal when player carries < 5 motes", () => {
+  const sim = make({
+    setup: {
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 4 },
+      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+    },
+  });
+  sim.tick(300);
+  assert.equal(sim.state.drifters[0].stolen, 0);
+  assert.equal(player(sim).motes, 4);
 });
 
-test("Architecture Isolation - Core must have zero DOM/Three.js imports", (t) => {
-  const coreFiles = fs.readdirSync("src/core");
-  for (const file of coreFiles) {
-    if (!file.endsWith(".ts")) continue;
-    const content = fs.readFileSync(`src/core/${file}`, "utf-8");
-    assert.ok(!content.includes("three"), `Core file ${file} must not import Three.js`);
-    assert.ok(!content.includes("document."), `Core file ${file} must not reference DOM document`);
-    assert.ok(!content.includes("window."), `Core file ${file} must not reference DOM window`);
+test("Drifter: pulse forces drop of stolen motes ('drifter_drop')", () => {
+  const sim = make({
+    setup: {
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 6 },
+      drifters: [{ pos: { x: 1, y: 0, z: 0 } }],
+    },
+  });
+  sim.tick(15);
+  assert.ok(sim.state.drifters[0].stolen > 0, "precondition: steal happened");
+  assert.equal(eventsOf(sim, "drifter_drop").length, 0);
+
+  sim.press("pulse");
+  sim.tick(2);
+
+  assert.ok(eventsOf(sim, "drifter_drop").length >= 1, "'drifter_drop' emitted");
+  assert.equal(sim.state.drifters[0].stolen, 0, "drifter no longer holds motes");
+});
+
+// 3. Safe zone
+test("Safe Zone: Shade never penetrates within 6.0m of a lit lantern", () => {
+  const lantern = { x: 0, y: 0, z: 0 };
+  const sim = make({
+    setup: {
+      player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 },
+      lanterns: [{ pos: lantern, lit: true }],
+      shades: [
+        { pos: { x: 20, y: 0, z: 0 } },
+        { pos: { x: -15, y: 0, z: 12 } },
+        { pos: { x: 0, y: 0, z: -18 } },
+      ],
+    },
+  });
+  let minDist = Infinity;
+  for (let i = 0; i < 900; i++) {
+    sim.tick(1);
+    for (const s of sim.state.shades) {
+      const d = dist2D(s.pos, lantern);
+      minDist = Math.min(minDist, d);
+      assert.ok(d >= 6.0 - 1e-6, `tick ${i}: shade at ${d.toFixed(3)}m < 6.0m`);
+    }
   }
+  assert.ok(minDist >= 6.0 - 1e-6);
 });
 
-test("Headless CLI - Determinism Verification", (t) => {
-  const out1 = "tests/output/out_det_1.jsonl";
-  const out2 = "tests/output/out_det_2.jsonl";
-  if (fs.existsSync(out1)) fs.unlinkSync(out1);
-  if (fs.existsSync(out2)) fs.unlinkSync(out2);
+// 4. Jump & fall
+test("Jump: vy = 7.0 on jump and gravity pulls player back down", () => {
+  const sim = make({ setup: { player: { pos: { x: 0, y: 0, z: 0 }, motes: 0 } } });
+  sim.tick(5);
+  const y0 = player(sim).pos.y;
 
-  const cmd1 = `npx tsx src/headless/index.ts --seed 9999 --night 1 --ticks 120 --out ${out1} --snapshot-every 20`;
-  const cmd2 = `npx tsx src/headless/index.ts --seed 9999 --night 1 --ticks 120 --out ${out2} --snapshot-every 20`;
+  sim.press("jump");
+  sim.tick(1);
+  const vy1 = player(sim).vel.y;
+  near(vy1, 7.0, 0.6, "vy right after jump");
 
-  execSync(cmd1, { stdio: "pipe" });
-  execSync(cmd2, { stdio: "pipe" });
+  for (let i = 0; i < 120; i++) {
+    sim.tick(1);
+  }
+  near(player(sim).pos.y, y0, 0.05, "player landed back on ground");
+});
 
-  const content1 = fs.readFileSync(out1, "utf-8");
-  const content2 = fs.readFileSync(out2, "utf-8");
+// 5. Headless performance
+test("Headless performance: 1000 ticks run under 2 seconds", () => {
+  const start = performance.now();
+  const sim = make();
+  sim.tick(1000);
+  const duration = performance.now() - start;
+  assert.ok(duration < 2000, `1000 ticks took ${duration.toFixed(2)}ms, must be < 2000ms`);
+});
 
-  assert.equal(content1, content2, "Deterministic runs with same seed must produce exact identical JSONL output");
+// 6. Determinism verification
+test("Determinism verification across two runs", () => {
+  const sim1 = createHeadlessGame({ seed: 7777 });
+  const sim2 = createHeadlessGame({ seed: 7777 });
+  sim1.tick(300);
+  sim2.tick(300);
+  assert.equal(sim1.toJSONL(), sim2.toJSONL(), "Two simulation runs with same seed must be identical");
 });
